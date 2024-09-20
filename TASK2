@@ -1,0 +1,105 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing import image
+
+# Simulated dataset structure (replace with actual data loading)
+# Assuming you have a directory structure like:
+# dataset/
+# ├── class1/
+# │   ├── img1.jpg
+# │   ├── img2.jpg
+# ├── class2/
+# │   ├── img1.jpg
+# │   ├── img2.jpg
+# ...
+# Adjust this path to your actual dataset
+data_dir = 'dataset/'
+
+# Parameters
+img_size = (224, 224)
+batch_size = 32
+
+# Data Preprocessing
+datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
+
+train_generator = datagen.flow_from_directory(
+    data_dir,
+    target_size=img_size,
+    batch_size=batch_size,
+    class_mode='categorical',
+    subset='training'
+)
+
+validation_generator = datagen.flow_from_directory(
+    data_dir,
+    target_size=img_size,
+    batch_size=batch_size,
+    class_mode='categorical',
+    subset='validation'
+)
+
+# Model Architecture with Transfer Learning
+base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(256, activation='relu')(x)
+predictions = Dense(train_generator.num_classes, activation='softmax')(x)
+
+model = Model(inputs=base_model.input, outputs=predictions)
+
+# Freeze the base model layers
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Compile the model
+model.compile(optimizer=Adam(learning_rate=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Model Training
+history = model.fit(train_generator, validation_data=validation_generator, epochs=10)
+
+# Model Evaluation
+val_loss, val_accuracy = model.evaluate(validation_generator)
+print(f'Validation Loss: {val_loss}, Validation Accuracy: {val_accuracy}')
+
+# Visualization of Training History
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend()
+
+plt.show()
+
+# Function to Predict and Visualize
+def predict_and_visualize(img_path):
+    img = image.load_img(img_path, target_size=img_size)
+    img_array = image.img_to_array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    predictions = model.predict(img_array)
+    predicted_class = np.argmax(predictions[0])
+    
+    plt.imshow(img)
+    plt.title(f'Predicted: {list(train_generator.class_indices.keys())[predicted_class]}')
+    plt.axis('off')
+    plt.show()
+
+
