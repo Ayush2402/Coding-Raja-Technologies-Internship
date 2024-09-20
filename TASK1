@@ -1,0 +1,71 @@
+import re
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import classification_report
+from flask import Flask, request, jsonify
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+
+# Download necessary NLTK resources
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+# Simulated dataset (replace this with actual data collection)
+data = {
+    'post': [
+        "I love this product! It's amazing.",
+        "This is the worst experience I've ever had.",
+        "I'm not sure how I feel about this.",
+        "Absolutely fantastic! Highly recommend.",
+        "It's okay, neither good nor bad."
+    ],
+    'sentiment': ['positive', 'negative', 'neutral', 'positive', 'neutral']
+}
+df = pd.DataFrame(data)
+
+# Text preprocessing function
+def preprocess_text(text):
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    text = text.lower()
+    tokens = text.split()
+    stop_words = set(stopwords.words('english'))
+    tokens = [word for word in tokens if word not in stop_words]
+    lemmatizer = WordNetLemmatizer()
+    tokens = [lemmatizer.lemmatize(word) for word in tokens]
+    return ' '.join(tokens)
+
+# Preprocess the posts
+df['processed_post'] = df['post'].apply(preprocess_text)
+
+# Feature extraction
+vectorizer = TfidfVectorizer()
+X = vectorizer.fit_transform(df['processed_post'])
+y = df['sentiment']
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Model training
+model = MultinomialNB()
+model.fit(X_train, y_train)
+
+# Model evaluation
+y_pred = model.predict(X_test)
+print(classification_report(y_test, y_pred))
+
+# Set up Flask app for deployment
+app = Flask(__name__)
+
+@app.route('/sentiment', methods=['POST'])
+def sentiment():
+    text = request.json['text']
+    processed_text = preprocess_text(text)
+    features = vectorizer.transform([processed_text])
+    prediction = model.predict(features)
+    return jsonify({'sentiment': prediction[0]})
+
+if __name__ == '__main__':
+    app.run(debug=True)
